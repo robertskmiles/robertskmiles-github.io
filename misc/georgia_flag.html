@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Recursive Flag of Georgia</title>
+<style>
+  :root {
+    --ink: #f4ead7;
+    --ink-dim: rgba(244, 234, 215, 0.55);
+    --rule: rgba(244, 234, 215, 0.18);
+    --bg: #0a0a0a;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    overflow: hidden;
+    background: #0a0a0a;
+    color: var(--ink);
+    font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    cursor: grab;
+  }
+  canvas.dragging { cursor: grabbing; }
+
+  .hud {
+    position: fixed;
+    pointer-events: none;
+    color: var(--ink);
+  }
+  .hud .label {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  }
+
+  #title {
+    top: 22px; left: 24px; max-width: 70vw;
+  }
+  #title .name {
+    font-size: 22px;
+    font-style: italic;
+    letter-spacing: 0.01em;
+    line-height: 1.1;
+    margin-top: 6px;
+  }
+  #title .name em { font-style: normal; }
+
+  #stats {
+    bottom: 22px; left: 24px;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  #stats .row { display: flex; gap: 10px; }
+  #stats .k { color: var(--ink-dim); width: 7ch; }
+  #stats .v { color: var(--ink); }
+
+  #controls {
+    position: fixed;
+    bottom: 22px; right: 24px;
+    display: flex; gap: 10px;
+    pointer-events: auto;
+  }
+  #controls button {
+    pointer-events: auto;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    padding: 8px 14px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  #controls button:hover { background: rgba(244, 234, 215, 0.06); border-color: var(--ink-dim); }
+  #controls button:active { background: rgba(244, 234, 215, 0.12); }
+
+  #hints {
+    top: 22px; right: 24px;
+    text-align: right;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    line-height: 1.7;
+  }
+
+  /* corner ornaments */
+  .tick { position: fixed; width: 14px; height: 14px; border-color: var(--rule); pointer-events: none; }
+  .tick.tl { top: 10px; left: 10px; border-top: 1px solid; border-left: 1px solid; }
+  .tick.tr { top: 10px; right: 10px; border-top: 1px solid; border-right: 1px solid; }
+  .tick.bl { bottom: 10px; left: 10px; border-bottom: 1px solid; border-left: 1px solid; }
+  .tick.br { bottom: 10px; right: 10px; border-bottom: 1px solid; border-right: 1px solid; }
+
+  @media (max-width: 600px) {
+    #title .name { font-size: 18px; }
+    #hints { font-size: 9px; }
+    #controls button { padding: 7px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<div class="tick tl"></div>
+<div class="tick tr"></div>
+<div class="tick bl"></div>
+<div class="tick br"></div>
+
+<div id="title" class="hud">
+  <div class="label">Recursive Standard</div>
+  <div class="name"><em>Georgia,</em> all the way down</div>
+</div>
+
+<div id="hints" class="hud">
+  scroll · pinch — zoom<br/>
+  drag — pan<br/>
+  dbl-click — dive
+</div>
+
+<div id="stats" class="hud">
+  <div class="row"><span class="k">depth</span><span class="v" id="depth">0</span></div>
+  <div class="row"><span class="k">zoom</span><span class="v" id="zoomv">1×</span></div>
+  <div class="row"><span class="k">flags</span><span class="v" id="count">0</span></div>
+</div>
+
+<div id="controls">
+  <button id="reset" title="Reset view">Reset</button>
+</div>
+
+<script>
+"use strict";
+
+/* ----------------------------------------------------------
+ * Recursive flag of Georgia.
+ *
+ * Geometry: a unit square with a centred red cross of thickness
+ * 0.2. The four white corner regions are each 0.4 × 0.4 squares,
+ * and each holds a recursive copy of the whole flag. The 0.4
+ * scaling preserves the square aspect ratio at every level, so
+ * the recursion is geometrically clean.
+ *
+ * Numerical strategy for "infinite" zoom:
+ * The view is stored relative to a *current root flag* identified
+ * by a path of corner indices from the top-level flag. When the
+ * view is fully contained in one of the root's four corner
+ * sub-flags, we descend: the corner becomes the new root and
+ * coordinates are rescaled. When the view escapes the root, we
+ * ascend. Because zoom is held in a bounded range relative to
+ * the current root, float64 precision never degrades regardless
+ * of how deep the user travels.
+ * ---------------------------------------------------------- */
+
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+
+// Geometry constants — official Georgia flag is 300 wide × 200 high, with
+// a 40-thick central cross. The four corner crosses (40×40, centred at
+// (65,40), (235,40), (65,160), (235,160) within the white quadrants) are
+// each replaced by a recursive flag of the same 3:2 ratio: 60 wide × 40
+// high, sharing those centres.
+//
+// Internally, coordinates are normalised so flag height = 1, width = 1.5.
+// Sub-flags are 0.3 × 0.2 (scale factor 0.2 in both dimensions, preserving
+// the 3:2 aspect — the recursion is self-similar).
+const FLAG_W = 1.5;
+const FLAG_H = 1.0;
+const CROSS  = 0.2;                  // 40/200, both x- and y-thickness
+const SUB    = 0.2;                  // sub-flag scale (60/300 = 40/200)
+const SUB_W  = SUB * FLAG_W;         // 0.3
+const SUB_H  = SUB * FLAG_H;         // 0.2
+const CORNERS = [                    // sub-flag top-left, in parent coords
+  [ 35/200,  20/200],   // TL = (0.175, 0.1)
+  [205/200,  20/200],   // TR = (1.025, 0.1)
+  [ 35/200, 140/200],   // BL = (0.175, 0.7)
+  [205/200, 140/200],   // BR = (1.025, 0.7)
+];
+
+// Colors (Georgian flag red is close to Pantone 032)
+const RED = '#e8112d';
+const WHITE = '#ffffff';
+const BG = '#0a0a0a';
+
+// View state — coordinates are within the *current root flag*.
+let viewX = FLAG_W / 2, viewY = FLAG_H / 2; // centre of root flag
+let zoom = 1;                        // pixels per root-height-unit
+let path = [];                       // list of corner indices: depth = path.length
+
+// Set initial zoom so the root flag fits with breathing room
+function fitZoom() {
+  const m = 0.85;
+  return Math.min(canvas.width * m / FLAG_W, canvas.height * m / FLAG_H);
+}
+function fitFlag() {
+  zoom = fitZoom();
+}
+
+let frameFlagCount = 0;
+
+/* -------------------- Rendering -------------------- */
+
+function flagToScreen(fx, fy) {
+  return [
+    (fx - viewX) * zoom + canvas.width / 2,
+    (fy - viewY) * zoom + canvas.height / 2,
+  ];
+}
+
+function renderFlag(fx, fy, fs) {
+  // fs is the flag's height in flag-coords; width is 1.5×fs.
+  const screenW = FLAG_W * fs * zoom;
+  const screenH = FLAG_H * fs * zoom;
+  const sx = (fx - viewX) * zoom + canvas.width / 2;
+  const sy = (fy - viewY) * zoom + canvas.height / 2;
+
+  // Cull: outside viewport
+  if (sx + screenW < 0 || sx > canvas.width)  return;
+  if (sy + screenH < 0 || sy > canvas.height) return;
+
+  // Too small to bother subdividing — paint a colour-averaged blob
+  if (screenH < 2.2) {
+    ctx.fillStyle = '#f7c9cf';
+    ctx.fillRect(sx, sy, screenW + 1, screenH + 1);
+    frameFlagCount++;
+    return;
+  }
+
+  // White field
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(sx, sy, screenW, screenH);
+
+  // Red cross — vertical bar (40 thick, full height) then horizontal bar
+  // (full width, 40 thick). Both bars are CROSS×fs×zoom = 0.2×fs×zoom thick.
+  const T = CROSS * fs * zoom;
+  ctx.fillStyle = RED;
+  ctx.fillRect(sx + (screenW - T) / 2, sy, T, screenH);
+  ctx.fillRect(sx, sy + (screenH - T) / 2, screenW, T);
+
+  frameFlagCount++;
+
+  // Recurse into the four corner sub-flags
+  const subFs = fs * SUB;
+  for (let c = 0; c < 4; c++) {
+    const [ox, oy] = CORNERS[c];
+    renderFlag(fx + ox * fs, fy + oy * fs, subFs);
+  }
+}
+
+
+function render() {
+  frameFlagCount = 0;
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  renderFlag(0, 0, 1);
+
+  // HUD updates
+  document.getElementById('depth').textContent = String(path.length);
+  document.getElementById('count').textContent = String(frameFlagCount);
+  // Effective zoom relative to fully-fitted root
+  const effective = (zoom / fitZoom()) * Math.pow(1 / SUB, path.length);
+  document.getElementById('zoomv').textContent = formatZoom(effective);
+}
+
+function formatZoom(z) {
+  if (z < 1000) return z.toFixed(2) + '×';
+  // Scientific-ish for big numbers
+  const exp = Math.floor(Math.log10(z));
+  const mant = (z / Math.pow(10, exp)).toFixed(2);
+  return mant + '×10^' + exp;
+}
+
+/* -------------------- Rebasing -------------------- */
+/* Keep coordinates well-conditioned by descending into a corner
+ * sub-flag whenever the view fits entirely inside one, and
+ * ascending when it spills out of the current root. The
+ * transformation is exact except for one float multiplication
+ * per step, so precision stays bounded at any depth.            */
+
+function viewBounds() {
+  const halfW = (canvas.width  / 2) / zoom;
+  const halfH = (canvas.height / 2) / zoom;
+  return [viewX - halfW, viewY - halfH, viewX + halfW, viewY + halfH];
+}
+
+function maybeDescend() {
+  // Allow up to a few descent steps per frame to avoid a runaway loop.
+  for (let i = 0; i < 4; i++) {
+    const [minX, minY, maxX, maxY] = viewBounds();
+    let chosen = -1;
+    for (let c = 0; c < 4; c++) {
+      const [ox, oy] = CORNERS[c];
+      if (minX >= ox && maxX <= ox + SUB_W &&
+          minY >= oy && maxY <= oy + SUB_H) {
+        chosen = c; break;
+      }
+    }
+    if (chosen === -1) return;
+    const [ox, oy] = CORNERS[chosen];
+    viewX = (viewX - ox) / SUB;
+    viewY = (viewY - oy) / SUB;
+    zoom *= SUB;
+    path.push(chosen);
+  }
+}
+
+function maybeAscend() {
+  for (let i = 0; i < 4; i++) {
+    if (path.length === 0) return;
+    const [minX, minY, maxX, maxY] = viewBounds();
+    const escapes =
+      minX < 0 || maxX > FLAG_W || minY < 0 || maxY > FLAG_H;
+    if (!escapes) return;
+    const c = path.pop();
+    const [ox, oy] = CORNERS[c];
+    viewX = ox + viewX * SUB;
+    viewY = oy + viewY * SUB;
+    zoom /= SUB;
+  }
+}
+
+function rebase() { maybeAscend(); maybeDescend(); }
+
+/* -------------------- Resize -------------------- */
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // raw pixel space
+}
+
+
+let resetRaf = null;
+let resetActive = false;
+
+function cancelResetAnimation() {
+  if (resetRaf !== null) {
+    cancelAnimationFrame(resetRaf);
+    resetRaf = null;
+  }
+  resetActive = false;
+}
+
+function smoothstep(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function reset() {
+  cancelResetAnimation();
+  resetActive = true;
+
+  const cx = canvas.clientWidth / 2;
+  const cy = canvas.clientHeight / 2;
+  let phase = 'ascend';
+  let settleStart = 0;
+  let settleFromX = 0;
+  let settleFromY = 0;
+  let settleFromZoom = 0;
+  const settleDuration = 850;
+
+  function startSettle(now) {
+    phase = 'settle';
+    settleStart = now;
+    settleFromX = viewX;
+    settleFromY = viewY;
+    settleFromZoom = zoom;
+  }
+
+  function tick(now) {
+    if (!resetActive) return;
+
+    if (phase === 'ascend') {
+      if (path.length > 0) {
+        // Use the same mechanics as ordinary wheel zooming. A modest per-frame
+        // factor keeps rebasing incremental, so we never ask the renderer to draw
+        // from an exponentially large global coordinate system.
+        zoomAt(cx, cy, 0.935);
+        resetRaf = requestAnimationFrame(tick);
+        return;
+      }
+      startSettle(now);
+    }
+
+    const t = Math.min(1, (now - settleStart) / settleDuration);
+    const e = smoothstep(t);
+    viewX = lerp(settleFromX, FLAG_W / 2, e);
+    viewY = lerp(settleFromY, FLAG_H / 2, e);
+    zoom = lerp(settleFromZoom, fitZoom(), e);
+    rebase();
+    scheduleRender();
+
+    if (t < 1) {
+      resetRaf = requestAnimationFrame(tick);
+    } else {
+      resetRaf = null;
+      resetActive = false;
+      path = [];
+      viewX = FLAG_W / 2;
+      viewY = FLAG_H / 2;
+      zoom = fitZoom();
+      scheduleRender();
+    }
+  }
+
+  resetRaf = requestAnimationFrame(tick);
+}
+
+window.addEventListener('resize', () => {
+  // Preserve the current effective view across resize
+  resize();
+  rebase();
+  scheduleRender();
+});
+
+/* -------------------- Input: mouse/wheel -------------------- */
+
+let dragging = false, lastPx = 0, lastPy = 0;
+
+canvas.addEventListener('mousedown', (e) => {
+  cancelResetAnimation();
+  dragging = true;
+  lastPx = e.clientX; lastPy = e.clientY;
+  canvas.classList.add('dragging');
+});
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  canvas.classList.remove('dragging');
+});
+window.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  cancelResetAnimation();
+  const dpr = canvas.width / canvas.clientWidth;
+  const dx = (e.clientX - lastPx) * dpr;
+  const dy = (e.clientY - lastPy) * dpr;
+  lastPx = e.clientX; lastPy = e.clientY;
+  viewX -= dx / zoom;
+  viewY -= dy / zoom;
+  rebase();
+  scheduleRender();
+});
+
+canvas.addEventListener('wheel', (e) => {
+  cancelResetAnimation();
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+
+canvas.addEventListener('dblclick', (e) => {
+  cancelResetAnimation();
+  zoomAt(e.clientX, e.clientY, 2.5);
+});
+
+function zoomAt(clientX, clientY, factor) {
+  const dpr = canvas.width / canvas.clientWidth;
+  const px = clientX * dpr, py = clientY * dpr;
+  // Flag-coord under cursor before zoom
+  const fx = (px - canvas.width / 2)  / zoom + viewX;
+  const fy = (py - canvas.height / 2) / zoom + viewY;
+  zoom *= factor;
+  // Reposition view so (fx, fy) stays under the cursor
+  viewX = fx - (px - canvas.width / 2)  / zoom;
+  viewY = fy - (py - canvas.height / 2) / zoom;
+  rebase();
+  scheduleRender();
+}
+
+/* -------------------- Input: touch (pan + pinch) -------------------- */
+
+let touches = new Map();   // identifier -> {x, y}
+let pinchStart = null;     // { dist, midX, midY, zoom, viewX, viewY }
+
+canvas.addEventListener('touchstart', (e) => {
+  cancelResetAnimation();
+  for (const t of e.changedTouches) {
+    touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+  }
+  if (touches.size === 2) {
+    pinchStart = makePinchStart();
+  } else {
+    pinchStart = null;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  // Update positions
+  for (const t of e.changedTouches) {
+    if (touches.has(t.identifier)) {
+      touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+  }
+  if (touches.size === 1 && !pinchStart) {
+    // Single-finger pan
+    const t = e.touches[0];
+    const dpr = canvas.width / canvas.clientWidth;
+    const prev = lastSingleTouch || { x: t.clientX, y: t.clientY };
+    const dx = (t.clientX - prev.x) * dpr;
+    const dy = (t.clientY - prev.y) * dpr;
+    viewX -= dx / zoom;
+    viewY -= dy / zoom;
+    lastSingleTouch = { x: t.clientX, y: t.clientY };
+    rebase();
+    scheduleRender();
+  } else if (touches.size === 2 && pinchStart) {
+    const arr = [...touches.values()];
+    const dx = arr[0].x - arr[1].x;
+    const dy = arr[0].y - arr[1].y;
+    const dist = Math.hypot(dx, dy);
+    const midX = (arr[0].x + arr[1].x) / 2;
+    const midY = (arr[0].y + arr[1].y) / 2;
+
+    // Restore pre-pinch state, then apply combined zoom + translate
+    zoom = pinchStart.zoom;
+    viewX = pinchStart.viewX;
+    viewY = pinchStart.viewY;
+
+    const factor = dist / pinchStart.dist;
+    // Zoom around the original midpoint
+    const dpr = canvas.width / canvas.clientWidth;
+    const px0 = pinchStart.midX * dpr, py0 = pinchStart.midY * dpr;
+    const fx = (px0 - canvas.width / 2)  / zoom + viewX;
+    const fy = (py0 - canvas.height / 2) / zoom + viewY;
+    zoom *= factor;
+    viewX = fx - (px0 - canvas.width / 2)  / zoom;
+    viewY = fy - (py0 - canvas.height / 2) / zoom;
+
+    // Then translate to track the moving midpoint
+    const pxN = midX * dpr, pyN = midY * dpr;
+    viewX -= (pxN - px0) / zoom;
+    viewY -= (pyN - py0) / zoom;
+
+    rebase();
+    scheduleRender();
+  }
+}, { passive: false });
+
+let lastSingleTouch = null;
+
+canvas.addEventListener('touchend', (e) => {
+  for (const t of e.changedTouches) touches.delete(t.identifier);
+  if (touches.size < 2) pinchStart = null;
+  if (touches.size === 1) {
+    const t = [...touches.values()][0];
+    lastSingleTouch = { x: t.x, y: t.y };
+  } else {
+    lastSingleTouch = null;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', (e) => {
+  for (const t of e.changedTouches) touches.delete(t.identifier);
+  pinchStart = null;
+  lastSingleTouch = null;
+}, { passive: false });
+
+function makePinchStart() {
+  const arr = [...touches.values()];
+  const dx = arr[0].x - arr[1].x;
+  const dy = arr[0].y - arr[1].y;
+  return {
+    dist: Math.hypot(dx, dy),
+    midX: (arr[0].x + arr[1].x) / 2,
+    midY: (arr[0].y + arr[1].y) / 2,
+    zoom, viewX, viewY,
+  };
+}
+
+/* -------------------- Input: keyboard -------------------- */
+
+window.addEventListener('keydown', (e) => {
+  const step = 40;
+  if (!(e.key === 'r' || e.key === 'R')) cancelResetAnimation();
+  let handled = true;
+  if (e.key === 'ArrowLeft')       viewX -= step / zoom;
+  else if (e.key === 'ArrowRight') viewX += step / zoom;
+  else if (e.key === 'ArrowUp')    viewY -= step / zoom;
+  else if (e.key === 'ArrowDown')  viewY += step / zoom;
+  else if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth/2, canvas.clientHeight/2, 1.4);
+  else if (e.key === '-' || e.key === '_') zoomAt(canvas.clientWidth/2, canvas.clientHeight/2, 1/1.4);
+  else if (e.key === 'r' || e.key === 'R') {
+    reset();
+    e.preventDefault();
+    return;
+  }
+  else handled = false;
+  if (handled) {
+    rebase();
+    scheduleRender();
+    e.preventDefault();
+  }
+});
+
+document.getElementById('reset').addEventListener('click', reset);
+
+/* -------------------- Render loop -------------------- */
+
+let rafScheduled = false;
+function scheduleRender() {
+  if (rafScheduled) return;
+  rafScheduled = true;
+  requestAnimationFrame(() => { rafScheduled = false; render(); });
+}
+
+/* -------------------- Boot -------------------- */
+
+function boot() {
+  resize();
+  // Only refit zoom if we haven't been initialized yet
+  if (!boot._inited) {
+    fitFlag();
+    boot._inited = true;
+  }
+  render();
+}
+
+// Run as aggressively as possible: now, on load, and at next animation frame.
+// All idempotent — safe to call repeatedly.
+boot();
+window.addEventListener('load', boot);
+requestAnimationFrame(boot);
+
+</script>
+</body>
+</html>
