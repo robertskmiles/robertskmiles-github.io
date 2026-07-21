@@ -170,6 +170,20 @@
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
 
+// Offscreen canvas the scene is drawn into. Normal interaction blits it
+// to the visible canvas 1:1. The reset animation instead renders several
+// sub-frames at intermediate zoom levels and averages them on the visible
+// canvas — true sampled motion blur, so a frame that sweeps a wide zoom
+// range reads as one continuous radial streak instead of a strobe of
+// unrelated zoom levels.
+const scene = document.createElement('canvas');
+const sctx = scene.getContext('2d');
+
+// Sampled-blur tuning: aim for one sub-frame per ~0.05 log-zoom of travel,
+// capped to keep the worst-case frame cost bounded.
+const BLUR_LOG_STEP = 0.05;
+const BLUR_MAX_SAMPLES = 16;
+
 // Geometry constants — official Georgia flag is 300 wide × 200 high, with
 // a 40-thick central cross. The four corner crosses (40×40, centred at
 // (65,40), (235,40), (65,160), (235,160) within the white quadrants) are
@@ -211,9 +225,35 @@ function fitFlag() {
   zoom = fitZoom();
 }
 
+// Zoom limits, relative to the current root. The min stops the flag
+// shrinking to an unfindable dot. The max stops float64 falling apart:
+// rebasing keeps zoom bounded whenever the user dives toward real detail
+// (each descent divides zoom by 5), so zoom only grows without bound when
+// aimed at featureless regions — the cross interior, plain white, or the
+// invisible white-on-white edge of a sub-flag — where there is nothing
+// more to see anyway. 1e9 keeps drift at ~1e-4 px per event.
+const MIN_ZOOM_REL = 0.1;
+const MAX_ZOOM_REL = 1e9;
+
+function clampZoom(z) {
+  const fit = fitZoom();
+  return Math.min(Math.max(z, fit * MIN_ZOOM_REL), fit * MAX_ZOOM_REL);
+}
+
 let frameFlagCount = 0;
 
 /* -------------------- Rendering -------------------- */
+
+// fillRect clipped to the viewport. Canvas rasterisers misbehave when fed
+// astronomically large coordinates, and near max zoom the root flag's
+// screen rect is ~1e12 px wide; clipping axis-aligned rects is exact.
+function fillClamped(x, y, w, h) {
+  const x0 = Math.max(x, -2), y0 = Math.max(y, -2);
+  const x1 = Math.min(x + w, canvas.width + 2);
+  const y1 = Math.min(y + h, canvas.height + 2);
+  if (x1 <= x0 || y1 <= y0) return;
+  sctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+}
 
 function flagToScreen(fx, fy) {
   return [
@@ -234,23 +274,24 @@ function renderFlag(fx, fy, fs) {
   if (sy + screenH < 0 || sy > canvas.height) return;
 
   // Too small to bother subdividing — paint a colour-averaged blob
+  // (the flag is ~36.5% red overall, counting the recursion)
   if (screenH < 2.2) {
-    ctx.fillStyle = '#f7c9cf';
-    ctx.fillRect(sx, sy, screenW + 1, screenH + 1);
+    sctx.fillStyle = '#f7a9b3';
+    fillClamped(sx, sy, screenW + 1, screenH + 1);
     frameFlagCount++;
     return;
   }
 
   // White field
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(sx, sy, screenW, screenH);
+  sctx.fillStyle = WHITE;
+  fillClamped(sx, sy, screenW, screenH);
 
   // Red cross — vertical bar (40 thick, full height) then horizontal bar
   // (full width, 40 thick). Both bars are CROSS×fs×zoom = 0.2×fs×zoom thick.
   const T = CROSS * fs * zoom;
-  ctx.fillStyle = RED;
-  ctx.fillRect(sx + (screenW - T) / 2, sy, T, screenH);
-  ctx.fillRect(sx, sy + (screenH - T) / 2, screenW, T);
+  sctx.fillStyle = RED;
+  fillClamped(sx + (screenW - T) / 2, sy, T, screenH);
+  fillClamped(sx, sy + (screenH - T) / 2, screenW, T);
 
   frameFlagCount++;
 
@@ -263,18 +304,26 @@ function renderFlag(fx, fy, fs) {
 }
 
 
-function render() {
+function drawScene() {
   frameFlagCount = 0;
-  ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  sctx.fillStyle = BG;
+  sctx.fillRect(0, 0, canvas.width, canvas.height);
   renderFlag(0, 0, 1);
+}
 
-  // HUD updates
+function updateHud() {
   document.getElementById('depth').textContent = String(path.length);
   document.getElementById('count').textContent = String(frameFlagCount);
   // Effective zoom relative to fully-fitted root
   const effective = (zoom / fitZoom()) * Math.pow(1 / SUB, path.length);
   document.getElementById('zoomv').textContent = formatZoom(effective);
+}
+
+function render() {
+  drawScene();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(scene, 0, 0);
+  updateHud();
 }
 
 function formatZoom(z) {
@@ -299,8 +348,9 @@ function viewBounds() {
 }
 
 function maybeDescend() {
-  // Allow up to a few descent steps per frame to avoid a runaway loop.
-  for (let i = 0; i < 4; i++) {
+  // Iteration cap guards against a runaway loop; it is generous enough
+  // that a single event never legitimately needs more steps.
+  for (let i = 0; i < 64; i++) {
     const [minX, minY, maxX, maxY] = viewBounds();
     let chosen = -1;
     for (let c = 0; c < 4; c++) {
@@ -316,11 +366,18 @@ function maybeDescend() {
     viewY = (viewY - oy) / SUB;
     zoom *= SUB;
     path.push(chosen);
+    // The dive target path is relative to the root: descending consumes
+    // its first corner (which must match — the view is inside the target
+    // chain whenever a dive is running).
+    if (divePath) {
+      if (divePath.length > 0 && divePath[0] === chosen) divePath.shift();
+      else cancelDive();
+    }
   }
 }
 
 function maybeAscend() {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 64; i++) {
     if (path.length === 0) return;
     const [minX, minY, maxX, maxY] = viewBounds();
     const escapes =
@@ -331,6 +388,7 @@ function maybeAscend() {
     viewX = ox + viewX * SUB;
     viewY = oy + viewY * SUB;
     zoom /= SUB;
+    if (divePath) divePath.unshift(c);
   }
 }
 
@@ -343,6 +401,8 @@ function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
+  scene.width = canvas.width;
+  scene.height = canvas.height;
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
   ctx.setTransform(1, 0, 0, 1, 0, 0); // raw pixel space
@@ -360,6 +420,155 @@ function cancelResetAnimation() {
   resetActive = false;
 }
 
+let diveRaf = null;
+let diveActive = false;
+
+function cancelDive() {
+  if (diveRaf !== null) {
+    cancelAnimationFrame(diveRaf);
+    diveRaf = null;
+  }
+  diveActive = false;
+  divePath = null;
+}
+
+// Any user input cancels whichever animation is running.
+function cancelAnimations() {
+  cancelResetAnimation();
+  cancelDive();
+}
+
+/* Double-click starts a sustained dive. Zooming blindly at the clicked
+ * pixel almost always bottoms out in featureless red or white, so the
+ * dive picks an interesting destination instead: the nearest visible
+ * cross to the click, extended by a random corner path deep past the
+ * edge of visibility. The path is always kept DIVE_LOOKAHEAD (several
+ * levels) deeper than the viewport scale, so each lazy extension moves the
+ * anchor by well under a pixel: the result is one smooth, straight
+ * zoom along a fixed limit point of the recursion, threading through
+ * cross after cross indefinitely. Any input cancels it.
+ *
+ * The target is stored as a PATH of corner indices below the current
+ * root, not as coordinates: rebasing coordinates would multiply their
+ * float error by 5 at every descent (visibly wrong after ~22 levels),
+ * whereas shifting an exact integer path is lossless at any depth.
+ * The target flag's coordinates are recomputed fresh each frame from
+ * the path, so error never accumulates. */
+
+let divePath = null; // corner indices from current root to target flag
+
+function diveTargetFlag() {
+  let x = 0, y = 0, fs = 1;
+  for (const c of divePath) {
+    x += CORNERS[c][0] * fs;
+    y += CORNERS[c][1] * fs;
+    fs *= SUB;
+  }
+  return { x, y, fs };
+}
+
+const DIVE_MIN_VISIBLE = 24; // px — smallest flag that counts as "visible"
+
+// Keep the target flag this many levels below viewport scale. Extending
+// the random path then perturbs the anchor point by at most
+// SUB^LOOKAHEAD × viewport ≈ 0.01 px — invisible, so the dive stays a
+// single straight zoom even though the path is chosen lazily.
+const DIVE_LOOKAHEAD = Math.pow(SUB, 7);
+
+function extendDiveTarget() {
+  let fs = Math.pow(SUB, divePath.length);
+  while (fs * zoom > canvas.height * DIVE_LOOKAHEAD) {
+    divePath.push(Math.floor(Math.random() * 4));
+    fs *= SUB;
+  }
+}
+
+function pickDiveTarget(fx, fy) {
+  // Walk down the chain of flags containing the click, as long as the
+  // containing sub-flag is still comfortably visible on screen,
+  // collecting the corner path as we go.
+  const p = [];
+  let x = 0, y = 0, fs = 1;
+  for (let guard = 0; guard < 64; guard++) {
+    let entered = false;
+    for (let c = 0; c < 4; c++) {
+      const sx = x + CORNERS[c][0] * fs, sy = y + CORNERS[c][1] * fs;
+      const sfs = fs * SUB;
+      if (sfs * zoom < DIVE_MIN_VISIBLE) continue;
+      if (fx >= sx && fx <= sx + FLAG_W * sfs &&
+          fy >= sy && fy <= sy + FLAG_H * sfs) {
+        x = sx; y = sy; fs = sfs;
+        p.push(c);
+        entered = true;
+        break;
+      }
+    }
+    if (!entered) break;
+  }
+  // Nearest cross to the click: this flag's own, or one of its four
+  // sub-flags' (a cross is centred in its flag).
+  let bestC = -1;
+  let best = Math.hypot(fx - (x + FLAG_W / 2 * fs),
+                        fy - (y + FLAG_H / 2 * fs));
+  for (let c = 0; c < 4; c++) {
+    const sx = x + CORNERS[c][0] * fs, sy = y + CORNERS[c][1] * fs;
+    const sfs = fs * SUB;
+    const d = Math.hypot(fx - (sx + FLAG_W / 2 * sfs),
+                         fy - (sy + FLAG_H / 2 * sfs));
+    if (d < best) { best = d; bestC = c; }
+  }
+  if (bestC >= 0) p.push(bestC);
+  divePath = p;
+  // Commit to a random corner path far past the edge of visibility.
+  extendDiveTarget();
+}
+
+function startDive(clientX, clientY) {
+  cancelAnimations();
+  const dpr = canvas.width / canvas.clientWidth;
+  const fx = (clientX * dpr - canvas.width / 2) / zoom + viewX;
+  const fy = (clientY * dpr - canvas.height / 2) / zoom + viewY;
+  pickDiveTarget(fx, fy);
+  diveActive = true;
+
+  const cruiseRate = 2.4 / 1000; // log-zoom per ms (~1.5 depth levels/s)
+  const rampMs = 600;
+  const panTau = 320;            // ms — target's ease toward screen centre
+  let start = null;
+  let last = null;
+
+  function tick(now) {
+    if (!diveActive) return;
+    if (start === null) { start = now; last = now; }
+    const dt = Math.min(now - last, 100);
+    last = now;
+    const rate = cruiseRate * smoothstep(Math.min(1, (now - start) / rampMs));
+
+    // Lazily extend the committed path, staying far below view scale.
+    extendDiveTarget();
+
+    const tf = diveTargetFlag();
+    const tx = tf.x + (FLAG_W / 2) * tf.fs;
+    const ty = tf.y + (FLAG_H / 2) * tf.fs;
+    // The target's screen position eases toward the centre while the
+    // zoom advances anchored on the target, so the dive both closes in
+    // on the cross and re-centres it.
+    const sx0 = (tx - viewX) * zoom + canvas.width / 2;
+    const sy0 = (ty - viewY) * zoom + canvas.height / 2;
+    const blend = 1 - Math.exp(-dt / panTau);
+    const sx = sx0 + (canvas.width / 2 - sx0) * blend;
+    const sy = sy0 + (canvas.height / 2 - sy0) * blend;
+    zoom = clampZoom(zoom * Math.exp(rate * dt));
+    viewX = tx - (sx - canvas.width / 2) / zoom;
+    viewY = ty - (sy - canvas.height / 2) / zoom;
+    rebase();
+    scheduleRender();
+    diveRaf = requestAnimationFrame(tick);
+  }
+
+  diveRaf = requestAnimationFrame(tick);
+}
+
 function smoothstep(t) {
   return t * t * (3 - 2 * t);
 }
@@ -369,17 +578,29 @@ function lerp(a, b, t) {
 }
 
 function reset() {
-  cancelResetAnimation();
+  cancelAnimations();
   resetActive = true;
 
   const cx = canvas.clientWidth / 2;
   const cy = canvas.clientHeight / 2;
   let phase = 'ascend';
+  let lastNow = null;
   let settleStart = 0;
   let settleFromX = 0;
   let settleFromY = 0;
   let settleFromZoom = 0;
   const settleDuration = 850;
+
+  // The ascent starts at a stately pace and accelerates exponentially,
+  // doubling roughly every 1.8 s. Total return time therefore grows with
+  // the log of the distance travelled: shallow dives amble home, deep ones
+  // keep gathering speed — a felt sense of how far down you were. Tuned so
+  // a 100-level dive returns in ~10 s. Rebasing still happens step by step
+  // through the ordinary zoomAt/rebase machinery, so coordinates stay
+  // well-conditioned.
+  const baseRate = -Math.log(0.978) / 16.7; // log-zoom per ms, initial
+  const rateTau = 2600;                     // ms for the rate to grow by e
+  let ascendStart = null;
 
   function startSettle(now) {
     phase = 'settle';
@@ -394,10 +615,31 @@ function reset() {
 
     if (phase === 'ascend') {
       if (path.length > 0) {
-        // Use the same mechanics as ordinary wheel zooming. A modest per-frame
-        // factor keeps rebasing incremental, so we never ask the renderer to draw
-        // from an exponentially large global coordinate system.
-        zoomAt(cx, cy, 0.935);
+        if (ascendStart === null) ascendStart = now;
+        const dt = lastNow === null ? 16.7 : Math.min(now - lastNow, 100);
+        lastNow = now;
+        const rate = baseRate * Math.exp((now - ascendStart) / rateTau);
+
+        // Sampled motion blur: this frame sweeps `logStep` of log-zoom.
+        // Split the sweep into sub-frames spaced ≤ BLUR_LOG_STEP apart,
+        // render each at its intermediate zoom, and average them on the
+        // visible canvas (drawing sample i at alpha 1/(i+1) yields a
+        // uniform mean). At low speed this degenerates to one sharp
+        // frame; at high speed the averaged samples form continuous
+        // radial streaks instead of a strobe of unrelated zoom levels.
+        const logStep = rate * dt;
+        const n = Math.min(BLUR_MAX_SAMPLES,
+                           Math.max(1, Math.ceil(logStep / BLUR_LOG_STEP)));
+        const subFactor = Math.exp(-logStep / n);
+        for (let i = 0; i < n && path.length > 0; i++) {
+          applyZoom(cx, cy, subFactor);
+          drawScene();
+          ctx.globalAlpha = 1 / (i + 1);
+          ctx.drawImage(scene, 0, 0);
+        }
+        ctx.globalAlpha = 1;
+        updateHud();
+
         resetRaf = requestAnimationFrame(tick);
         return;
       }
@@ -440,7 +682,7 @@ window.addEventListener('resize', () => {
 let dragging = false, lastPx = 0, lastPy = 0;
 
 canvas.addEventListener('mousedown', (e) => {
-  cancelResetAnimation();
+  cancelAnimations();
   dragging = true;
   lastPx = e.clientX; lastPy = e.clientY;
   canvas.classList.add('dragging');
@@ -451,7 +693,7 @@ window.addEventListener('mouseup', () => {
 });
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
-  cancelResetAnimation();
+  cancelAnimations();
   const dpr = canvas.width / canvas.clientWidth;
   const dx = (e.clientX - lastPx) * dpr;
   const dy = (e.clientY - lastPy) * dpr;
@@ -463,120 +705,55 @@ window.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('wheel', (e) => {
-  cancelResetAnimation();
+  cancelAnimations();
   e.preventDefault();
-  zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015));
+  // Normalise deltaMode: Firefox reports lines (mode 1), not pixels
+  let dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= 33;
+  else if (e.deltaMode === 2) dy *= window.innerHeight;
+  zoomAt(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
 }, { passive: false });
 
 canvas.addEventListener('dblclick', (e) => {
-  cancelResetAnimation();
-  zoomAt(e.clientX, e.clientY, 2.5);
+  startDive(e.clientX, e.clientY);
 });
 
-function zoomAt(clientX, clientY, factor) {
+// Apply a zoom step about a client-space point, without scheduling a
+// render — the reset animation calls this several times per frame while
+// building its motion-blurred composite.
+function applyZoom(clientX, clientY, factor) {
+  const newZoom = clampZoom(zoom * factor);
+  if (newZoom === zoom) return;
   const dpr = canvas.width / canvas.clientWidth;
   const px = clientX * dpr, py = clientY * dpr;
   // Flag-coord under cursor before zoom
   const fx = (px - canvas.width / 2)  / zoom + viewX;
   const fy = (py - canvas.height / 2) / zoom + viewY;
-  zoom *= factor;
+  zoom = newZoom;
   // Reposition view so (fx, fy) stays under the cursor
   viewX = fx - (px - canvas.width / 2)  / zoom;
   viewY = fy - (py - canvas.height / 2) / zoom;
   rebase();
+}
+
+function zoomAt(clientX, clientY, factor) {
+  applyZoom(clientX, clientY, factor);
   scheduleRender();
 }
 
 /* -------------------- Input: touch (pan + pinch) -------------------- */
 
+/* Both pan and pinch are applied incrementally, event by event, rather
+ * than from a gesture-start snapshot. Snapshots break here: rebase() can
+ * change the root flag mid-gesture, and a snapshot taken in the old
+ * root's coordinates then teleports the view. Increments always operate
+ * on the current root, so they compose with rebasing for free. */
+
 let touches = new Map();   // identifier -> {x, y}
-let pinchStart = null;     // { dist, midX, midY, zoom, viewX, viewY }
+let lastSingleTouch = null; // {x, y} of the panning finger, prev event
+let lastPinch = null;       // { dist, midX, midY } from the prev event
 
-canvas.addEventListener('touchstart', (e) => {
-  cancelResetAnimation();
-  for (const t of e.changedTouches) {
-    touches.set(t.identifier, { x: t.clientX, y: t.clientY });
-  }
-  if (touches.size === 2) {
-    pinchStart = makePinchStart();
-  } else {
-    pinchStart = null;
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchmove', (e) => {
-  e.preventDefault();
-  // Update positions
-  for (const t of e.changedTouches) {
-    if (touches.has(t.identifier)) {
-      touches.set(t.identifier, { x: t.clientX, y: t.clientY });
-    }
-  }
-  if (touches.size === 1 && !pinchStart) {
-    // Single-finger pan
-    const t = e.touches[0];
-    const dpr = canvas.width / canvas.clientWidth;
-    const prev = lastSingleTouch || { x: t.clientX, y: t.clientY };
-    const dx = (t.clientX - prev.x) * dpr;
-    const dy = (t.clientY - prev.y) * dpr;
-    viewX -= dx / zoom;
-    viewY -= dy / zoom;
-    lastSingleTouch = { x: t.clientX, y: t.clientY };
-    rebase();
-    scheduleRender();
-  } else if (touches.size === 2 && pinchStart) {
-    const arr = [...touches.values()];
-    const dx = arr[0].x - arr[1].x;
-    const dy = arr[0].y - arr[1].y;
-    const dist = Math.hypot(dx, dy);
-    const midX = (arr[0].x + arr[1].x) / 2;
-    const midY = (arr[0].y + arr[1].y) / 2;
-
-    // Restore pre-pinch state, then apply combined zoom + translate
-    zoom = pinchStart.zoom;
-    viewX = pinchStart.viewX;
-    viewY = pinchStart.viewY;
-
-    const factor = dist / pinchStart.dist;
-    // Zoom around the original midpoint
-    const dpr = canvas.width / canvas.clientWidth;
-    const px0 = pinchStart.midX * dpr, py0 = pinchStart.midY * dpr;
-    const fx = (px0 - canvas.width / 2)  / zoom + viewX;
-    const fy = (py0 - canvas.height / 2) / zoom + viewY;
-    zoom *= factor;
-    viewX = fx - (px0 - canvas.width / 2)  / zoom;
-    viewY = fy - (py0 - canvas.height / 2) / zoom;
-
-    // Then translate to track the moving midpoint
-    const pxN = midX * dpr, pyN = midY * dpr;
-    viewX -= (pxN - px0) / zoom;
-    viewY -= (pyN - py0) / zoom;
-
-    rebase();
-    scheduleRender();
-  }
-}, { passive: false });
-
-let lastSingleTouch = null;
-
-canvas.addEventListener('touchend', (e) => {
-  for (const t of e.changedTouches) touches.delete(t.identifier);
-  if (touches.size < 2) pinchStart = null;
-  if (touches.size === 1) {
-    const t = [...touches.values()][0];
-    lastSingleTouch = { x: t.x, y: t.y };
-  } else {
-    lastSingleTouch = null;
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchcancel', (e) => {
-  for (const t of e.changedTouches) touches.delete(t.identifier);
-  pinchStart = null;
-  lastSingleTouch = null;
-}, { passive: false });
-
-function makePinchStart() {
+function pinchGeometry() {
   const arr = [...touches.values()];
   const dx = arr[0].x - arr[1].x;
   const dy = arr[0].y - arr[1].y;
@@ -584,29 +761,97 @@ function makePinchStart() {
     dist: Math.hypot(dx, dy),
     midX: (arr[0].x + arr[1].x) / 2,
     midY: (arr[0].y + arr[1].y) / 2,
-    zoom, viewX, viewY,
   };
 }
+
+canvas.addEventListener('touchstart', (e) => {
+  cancelAnimations();
+  for (const t of e.changedTouches) {
+    touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+  }
+  if (touches.size === 2) {
+    lastPinch = pinchGeometry();
+    lastSingleTouch = null;
+  } else if (touches.size === 1) {
+    lastPinch = null;
+    const t = [...touches.values()][0];
+    lastSingleTouch = { x: t.x, y: t.y };
+  } else {
+    lastPinch = null;
+    lastSingleTouch = null;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (touches.has(t.identifier)) {
+      touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+  }
+  if (touches.size === 1 && lastSingleTouch) {
+    // Single-finger pan
+    const t = [...touches.values()][0];
+    const dpr = canvas.width / canvas.clientWidth;
+    viewX -= (t.x - lastSingleTouch.x) * dpr / zoom;
+    viewY -= (t.y - lastSingleTouch.y) * dpr / zoom;
+    lastSingleTouch = { x: t.x, y: t.y };
+    rebase();
+    scheduleRender();
+  } else if (touches.size === 2 && lastPinch) {
+    const p = pinchGeometry();
+    // Zoom by the change in finger spread, anchored at the midpoint...
+    if (lastPinch.dist > 0 && p.dist > 0) {
+      zoomAt(p.midX, p.midY, p.dist / lastPinch.dist);
+    }
+    // ...then pan by the midpoint's motion
+    const dpr = canvas.width / canvas.clientWidth;
+    viewX -= (p.midX - lastPinch.midX) * dpr / zoom;
+    viewY -= (p.midY - lastPinch.midY) * dpr / zoom;
+    lastPinch = p;
+    rebase();
+    scheduleRender();
+  }
+}, { passive: false });
+
+function touchesEnded(e) {
+  for (const t of e.changedTouches) touches.delete(t.identifier);
+  lastPinch = touches.size === 2 ? pinchGeometry() : null;
+  if (touches.size === 1) {
+    const t = [...touches.values()][0];
+    lastSingleTouch = { x: t.x, y: t.y };
+  } else {
+    lastSingleTouch = null;
+  }
+}
+canvas.addEventListener('touchend', touchesEnded, { passive: false });
+canvas.addEventListener('touchcancel', touchesEnded, { passive: false });
 
 /* -------------------- Input: keyboard -------------------- */
 
 window.addEventListener('keydown', (e) => {
-  const step = 40;
-  if (!(e.key === 'r' || e.key === 'R')) cancelResetAnimation();
+  const dpr = canvas.width / canvas.clientWidth;
+  const step = 40 * dpr;
+  if (e.key === 'r' || e.key === 'R') {
+    reset();
+    e.preventDefault();
+    return;
+  }
+  if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
+    cancelAnimations();
+    const f = (e.key === '+' || e.key === '=') ? 1.4 : 1 / 1.4;
+    zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, f);
+    e.preventDefault();
+    return;
+  }
   let handled = true;
   if (e.key === 'ArrowLeft')       viewX -= step / zoom;
   else if (e.key === 'ArrowRight') viewX += step / zoom;
   else if (e.key === 'ArrowUp')    viewY -= step / zoom;
   else if (e.key === 'ArrowDown')  viewY += step / zoom;
-  else if (e.key === '+' || e.key === '=') zoomAt(canvas.clientWidth/2, canvas.clientHeight/2, 1.4);
-  else if (e.key === '-' || e.key === '_') zoomAt(canvas.clientWidth/2, canvas.clientHeight/2, 1/1.4);
-  else if (e.key === 'r' || e.key === 'R') {
-    reset();
-    e.preventDefault();
-    return;
-  }
   else handled = false;
   if (handled) {
+    cancelAnimations();
     rebase();
     scheduleRender();
     e.preventDefault();
@@ -626,21 +871,9 @@ function scheduleRender() {
 
 /* -------------------- Boot -------------------- */
 
-function boot() {
-  resize();
-  // Only refit zoom if we haven't been initialized yet
-  if (!boot._inited) {
-    fitFlag();
-    boot._inited = true;
-  }
-  render();
-}
-
-// Run as aggressively as possible: now, on load, and at next animation frame.
-// All idempotent — safe to call repeatedly.
-boot();
-window.addEventListener('load', boot);
-requestAnimationFrame(boot);
+resize();
+fitFlag();
+render();
 
 </script>
 </body>
