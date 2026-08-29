@@ -290,23 +290,57 @@ height and $\tfrac{1}{4k+2}$ at odd height $2k+1$.
 
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[scale=1.1]
-% side view along x: y horizontal, z vertical
-\draw[fill=gray!25] (0,0) rectangle (3,0.5); % full base layer (side-on)
-\draw[fill=gray!25] (0,0.5) rectangle (3,1.0);
-\draw[fill=blue!20] (0,1.0) rectangle (1,1.5); \node[left] at (0,1.25) {\small lone \layer{L}};
-\draw[fill=red!20] (0,1.5) rectangle (3,2.0); \node[right] at (3,1.75) {\small perp.\ single ($+\tfrac12$)};
-\draw[fill=blue!20] (0,2.0) rectangle (1,2.5); \node[right] at (3,2.25) {\small parallel \layer{L} ($-\tfrac12$)};
-\draw[fill=red!20] (0,2.5) rectangle (3,3.0);
-\draw[fill=blue!20] (0,3.0) rectangle (1,3.5);
-\draw[dashed,thick] (1,0.8) -- (1,3.9);
-\node[above] at (1,3.9) {\small support boundary $y=1$};
-\draw[->,very thick] (1,3.7) -- (1,3.2);
-\node at (5.9,3.55) {\small combined COM sits \emph{exactly} here};
+\begin{tikzpicture}[scale=1.0]
+% oblique projection: screen = (x + 0.35 y, z + 0.5 y)
+% \cub{x0}{x1}{y0}{y1}{z0}{z1}{color}: front, top, right faces
+\newcommand{\cub}[7]{%
+  \fill[#7!45!white,draw=black,line width=0.35pt]
+    ({#1+0.35*#3},{#5+0.5*#3}) -- ({#2+0.35*#3},{#5+0.5*#3}) --
+    ({#2+0.35*#3},{#6+0.5*#3}) -- ({#1+0.35*#3},{#6+0.5*#3}) -- cycle;
+  \fill[#7!22!white,draw=black,line width=0.35pt]
+    ({#1+0.35*#3},{#6+0.5*#3}) -- ({#2+0.35*#3},{#6+0.5*#3}) --
+    ({#2+0.35*#4},{#6+0.5*#4}) -- ({#1+0.35*#4},{#6+0.5*#4}) -- cycle;
+  \fill[#7!62!gray,draw=black,line width=0.35pt]
+    ({#2+0.35*#3},{#5+0.5*#3}) -- ({#2+0.35*#4},{#5+0.5*#4}) --
+    ({#2+0.35*#4},{#6+0.5*#4}) -- ({#2+0.35*#3},{#6+0.5*#3}) -- cycle;}
+% axes triad
+\draw[->,gray] (-1.1,0.05) -- (-0.5,0.05) node[right,gray] {\scriptsize $x$};
+\draw[->,gray] (-1.1,0.05) -- (-0.89,0.35) node[above,gray] {\scriptsize $y$};
+\draw[->,gray] (-1.1,0.05) -- (-1.1,0.65) node[above,gray] {\scriptsize $z$};
+% layer 0 (even, y-slots), back to front
+\cub{0}{3}{2}{3}{0}{0.55}{gray}
+\cub{0}{3}{1}{2}{0}{0.55}{gray}
+\cub{0}{3}{0}{1}{0}{0.55}{gray}
+% layer 1 (odd, x-slots), left to right
+\cub{0}{1}{0}{3}{0.55}{1.1}{gray}
+\cub{1}{2}{0}{3}{0.55}{1.1}{gray}
+\cub{2}{3}{0}{3}{0.55}{1.1}{gray}
+% the interesting stack
+\cub{0}{3}{0}{1}{1.1}{1.65}{blue}   % lone side block
+\cub{1}{2}{0}{3}{1.65}{2.2}{red}    % perpendicular single
+\cub{0}{3}{0}{1}{2.2}{2.75}{blue}   % parallel L
+\cub{1}{2}{0}{3}{2.75}{3.3}{red}    % perpendicular single
+\cub{0}{3}{0}{1}{3.3}{3.85}{blue}   % parallel L (top)
+% support-boundary plane y = 1
+\fill[orange,opacity=0.06] (0.1,1.5) -- (3.6,1.5) -- (3.6,4.9) -- (0.1,4.9) -- cycle;
+\draw[dashed,thick,orange!75!black] (0.1,1.5) -- (3.6,1.5) -- (3.6,4.9) -- (0.1,4.9) -- cycle;
+\node[above,orange!75!black] at (1.85,4.9) {\small the support-boundary plane $y=1$};
+% centre of mass of the four layers above, at (1.5, 1, mid-height)
+\fill[orange!85!black] (1.85,3.25) circle (0.075);
+\draw[orange!85!black,line width=0.5pt] (1.92,3.29) -- (4.3,4.1);
+\node[anchor=west,align=left] at (4.3,4.1)
+  {\small combined COM of the four layers\\\small above the lone block: \emph{exactly}\\\small on the plane};
+\draw[line width=0.5pt] (2.0,2.95) -- (4.3,2.95);
+\node[anchor=west] at (4.3,2.95) {\small perpendicular singles: $+\tfrac12$ each};
+\draw[line width=0.5pt] (2.9,2.45) -- (4.3,2.35);
+\node[anchor=west] at (4.3,2.35) {\small parallel \layer{L} blocks: $-\tfrac12$ each};
+\draw[line width=0.5pt] (2.9,1.4) -- (4.3,1.6);
+\node[anchor=west] at (4.3,1.6) {\small the lone side block};
 \end{tikzpicture}
-\caption{Side view of the knife-edge configuration. Each perpendicular
-layer's unavoidable $+\tfrac12$ exactly cancels each parallel layer's best
-possible $-\tfrac12$.}
+\caption{The knife-edge configuration. The lone side block's support ends
+at the plane $y=1$; each perpendicular layer's unavoidable $+\tfrac12$
+exactly cancels each parallel layer's best possible $-\tfrac12$, parking
+the centre of mass of everything above precisely on the boundary.}
 \label{fig:knife}
 \end{figure}
 
