@@ -49,10 +49,14 @@ support, never inside --- and even granting knife-edge balance, no legal
 sequence of moves can ever reach such a layer. Third, the game itself
 collapses: across all $1{,}954{,}722$ positions reachable from towers of up
 to seven layers, the win/loss value and Sprague--Grundy value depend on just
-three small integers, reducing Jenga to a token game we solve completely.
-The first player wins if and only if the number of starting layers is not a
-multiple of three, the only winning openings remove a \emph{middle} block,
-and the standard 18-layer game is a second-player win.
+three small integers --- and the token game they define is \emph{exactly}
+the combinatorial Jenga of Pretzelnaut's video essay \emph{The Theory of
+Jenga}, which takes the naive collapse rule as an axiom. The physics, done
+carefully, ratifies the folk model completely. The first player wins if and
+only if the number of starting layers is not a multiple of three, the only
+winning openings remove a \emph{middle} block, and the standard 18-layer
+game is a second-player win; the Grundy values (new here) additionally
+solve multi-tower Jenga by XOR.
 \end{abstract}
 
 \section{Introduction}
@@ -67,17 +71,31 @@ The crudest formalization says a layer below the top collapses the tower
 exactly when it retains neither its middle block nor both side blocks ---
 i.e.\ the surviving support no longer spans the tower's centre line. A lone
 middle is fine (classic move), both sides with no middle is fine, but a lone
-\emph{side} block, or nothing at all, means the tower tips. This local rule
-makes Jenga a clean combinatorial game, but it ignores everything global: in
-real statics, whether a layer can hold depends on where the weight
-\emph{above} it sits.
+\emph{side} block, or nothing at all, means the tower tips.
+
+This crude game is not a straw man. It is precisely the model analyzed in
+Pretzelnaut's lovely SoME3 video essay
+\href{https://www.youtube.com/watch?v=wrSEfX82WbE}{\emph{The Theory of
+Jenga}}, which the reader is warmly encouraged to watch before (or instead
+of, we won't tell) reading on. The video takes the collapse rule as an
+assumption --- ``structurally essential'' blocks simply may not be removed
+--- observes that placement position and layer order never matter, boils
+each position down to a small bookkeeping pair, and finds a pattern of
+wins and losses repeating with period three. What the video cannot ask,
+because the rule is an axiom there, is whether the \emph{physics} agrees.
+A local support rule ignores everything global: in real statics, whether a
+layer can hold depends on where the weight \emph{above} it sits, and a
+lopsided enough superstructure ought to be able to break every one of
+those tidy assumptions.
 
 So we climbed one rung up the idealization ladder: keep perfect rigid
-uniform blocks in discrete slots, but do genuine rigid-body statics. This
-document records what we found. The short version: the physics, given a
-fair hearing, conspires to vindicate the crude rule with astonishing
-precision --- and then the game built on top of it turns out to be exactly
-solvable.
+uniform blocks in discrete slots, but do genuine rigid-body statics, and
+re-derive the game from the ground up. This document records what we
+found. The short version: the physics, given a fair hearing, conspires to
+vindicate the crude rule not approximately but \emph{exactly} --- every
+assumption the video makes for convenience comes back as a theorem, several
+of them by margins of precisely zero --- and the game that emerges from the
+full statics is Pretzelnaut's game, solved.
 
 \section{The model}
 
@@ -292,7 +310,7 @@ possible $-\tfrac12$.}
 \label{fig:knife}
 \end{figure}
 
-\begin{remark}[Three is the critical width]
+\begin{remark}[Three is the critical width]\label{rem:critical}
 This exact cancellation is special to Jenga being three blocks wide. In a
 hypothetical $w$-wide Jenga ($w$ odd), the perpendicular dead-centre mass
 sits $\tfrac{w}{2}-1$ outside the edge strip while the best parallel gain
@@ -340,10 +358,14 @@ define a move as a (removal, placement) pair that keeps both states stable,
 and a player with no such pair loses.
 \end{corollary}
 
-The upshot is remarkable: the naive Nim-like collapse rule (``no middle and
-at most one side $=$ fallen'') is \emph{exactly} right about lone side
-blocks in the full statics model, for reasons the naive rule could never
-articulate. The models do still differ elsewhere --- centre-of-mass
+The upshot is remarkable: the naive collapse rule (``no middle and at most
+one side $=$ fallen'' --- the video's Assumption~3, that ``structurally
+essential'' blocks may not be removed) is \emph{exactly} right about lone
+side blocks in the full statics model, for reasons the naive rule could
+never articulate: not because a lone side block couldn't possibly balance,
+but because the one configuration that balances it misses by a margin of
+zero and is dynamically unreachable anyway. The models do still appear to
+differ elsewhere --- centre-of-mass
 coupling means a lopsided superstructure can forbid removals far below it,
 e.g.\ over a lone-\emph{middle} layer --- so at this point we fully expected
 the game to be a tangled global affair. We were wrong.
@@ -453,6 +475,26 @@ the full $n=7$ solve (winner, Grundy value, and the set of winning
 openings) before the brute-force computation finished.
 \end{empirical}
 
+\begin{remark}[This is Pretzelnaut's game]\label{rem:pretzelnaut}
+Viewers of \emph{The Theory of Jenga} will recognise this immediately: it
+is the video's game, in different notation. The video's state pair
+``(full levels $+$ top blocks$/3$, half levels)'' encodes our
+$(\Fq + t/3,\ \Sq)$, and its three move deltas $(-\tfrac23, 0)$,
+$(-\tfrac23, +1)$, $(+\tfrac13, -1)$ are middle-mine, side-mine, and the
+forced $\Sq$-move. The fractional bookkeeping is a genuinely elegant touch:
+when the top completes, the thirds roll over into a whole new full level
+automatically --- our ``release'' mechanic, for free. The difference is the
+direction of travel. The video reaches this game \emph{top-down}, by taking
+the collapse rule as an assumption and asserting (correctly, but
+axiomatically) that placements and layer order don't matter. We reached it
+\emph{bottom-up}, from rigid-body statics, where every one of those steps
+had to be earned: the pinned middles are Theorem~\ref{thm:knife}, the
+untouchable \layer{LR} layers are Theorem~\ref{thm:unreachable}, and the
+irrelevance of placements and positions is the two-million-state
+verification above. The two constructions meet exactly. The naive model
+isn't an approximation of idealized Jenga; it is a faithful quotient of it.
+\end{remark}
+
 \subsection{Solving the token game}
 
 The token game is tiny, and its Grundy values are eventually periodic with
@@ -501,6 +543,15 @@ $n \equiv 0, 1, 2 \pmod 3$ respectively.
 In particular, \textbf{standard 18-layer Jenga is a second-player win}.
 \end{theorem}
 
+Credit where due: the win/loss half of this theorem --- the
+$\mathcal{P}$/$\mathcal{N}$ classification and its period-3 pattern --- is,
+for the naive model, Pretzelnaut's result (the video's memorizable
+``$9\times9$ grid'' is the periodic table above in its fractional
+coordinates). What this paper adds is the other half of each claim: that
+the idealized \emph{physics} changes nothing (Remark~\ref{rem:pretzelnaut}),
+and the full Grundy values, which a $\mathcal{P}$/$\mathcal{N}$ analysis
+alone cannot see and which pay off in Remark~\ref{rem:sums}.
+
 For the opening claim: from $(n{-}1, 0, 0)$ the two options are
 middle-mine to $(n{-}2,\,0,\,1)$ and side-mine to $(n{-}2,\,1,\,1)$; the
 $t=1$ table shows the former is $\mathcal{P}$ precisely when
@@ -516,7 +567,7 @@ layers at the rate that keeps the clock striking on the opponent's turn.
 cautious humans play real Jenga, though for reasons of physics rather than
 parity.
 
-\begin{remark}[Sums of towers]
+\begin{remark}[Sums of towers]\label{rem:sums}
 Because we have genuine Grundy values, multi-tower Jenga (move in exactly
 one tower on your turn; topple anything and you lose) is solved for free by
 XOR. Two 18-layer towers: $0 \oplus 0 = 0$, second player wins. An
@@ -587,6 +638,21 @@ players nudge blocks off-centre, and can overhang the footprint), friction
 (which rescues lone side blocks in the real world via clamping), non-uniform
 block weights (where real Jenga skill actually lives). Each breaks a
 different pillar of the analysis; each would make a lovely sequel.
+\item \textbf{Wider Jenga, where the models finally part ways.}
+Pretzelnaut's closing questions ask about four and five blocks per level
+(the video reports a tidy argument that four-wide is always a
+second-player win, and calls five-wide unstudied). Five-wide is where our
+story should genuinely change: by the critical-width
+Remark~\ref{rem:critical}, at $w \ge 5$ the physics no longer stands
+knife-edge-exactly behind a naive local support rule, so the
+statics-faithfulness that made width 3 so tidy becomes false or at least
+very different --- the naive game and the statics game must be analyzed
+separately, and may not agree. Someone should find out.
+\item \textbf{A conceptual proof of the period.} The video also asks for a
+non-inductive, ``see it in a flash'' explanation of the period-3 pattern.
+Our mod-3 clock (every third move releases a full layer) feels like half of
+such an explanation; the other half --- why the $\Fq$ and $\Sq$ periods
+lock to it --- still deserves a better argument than a table.
 \item \textbf{Misère and variants.} Our losing condition (no legal move)
 matches real Jenga's ``don't topple it''. But the $w$-wide, $h$-tall
 family, the atomic-move variant, and the strict-knife-edge convention are

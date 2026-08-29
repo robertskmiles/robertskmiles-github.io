@@ -90,7 +90,14 @@
   doesn't topple the tower.</p>
 
   <p>It turns out the whole edifice collapses &mdash; mathematically, not physically &mdash; into a
-  three-number token game that can be solved completely.</p>
+  three-number token game that can be solved completely. And if that token game sounds
+  familiar, it should: it is <em>exactly</em> the combinatorial Jenga of
+  <a href="https://www.youtube.com/watch?v=wrSEfX82WbE">Pretzelnaut's excellent SoME3 video
+  essay &ldquo;The Theory of Jenga&rdquo;</a>, which derives it by taking the naive collapse
+  rule as an axiom. (Watch it first &mdash; it's a lovely complement to the paper.) The
+  contribution here is the direction of travel: starting from genuine rigid-body statics and
+  discovering that every assumption the video makes for convenience comes back as a theorem,
+  several of them by margins of precisely zero.</p>
 
   <div class="result">
     <p><strong>Theorem (Idealized Jenga, solved).</strong> The first player wins the
@@ -98,6 +105,9 @@
     The winning opening moves are exactly the <em>middle-block</em> removals; every
     side-block opening loses. In particular, <strong>standard 18-layer Jenga is a
     second-player win</strong>.</p>
+    <p style="font-size:0.9rem; color:var(--muted);">The win/loss classification for the
+    naive model is Pretzelnaut's; what's added here is that the idealized physics changes
+    nothing, plus the full Sprague&ndash;Grundy values.</p>
   </div>
 
   <h2>Three surprises along the way</h2>
@@ -121,15 +131,17 @@
   survives the removal and then collapses under <em>every possible placement</em>. You'd be
   left holding the block.</p>
 
-  <p><strong>3. The game is secretly a token game.</strong> Across all 1,954,722 positions
-  reachable from towers of two to seven layers &mdash; solved exactly by brute force &mdash; the
-  win/loss value <em>and</em> the Sprague&ndash;Grundy value depend on just three small numbers:
-  how many removable full layers remain, how many removable side+middle pairs remain, and
-  how full the top layer is (mod 3). Layer positions, placement choices, and the entire
-  centre-of-mass coupling never change a single game value. The resulting token game is a
-  fight over move-count parity against a mod-3 clock: a full layer yields one move or two at
-  the miner's choice, and every third move completes the top and releases a fresh layer into
-  the pool.</p>
+  <p><strong>3. The game is secretly Pretzelnaut's token game.</strong> Across all 1,954,722
+  positions reachable from towers of two to seven layers &mdash; solved exactly by brute
+  force &mdash; the win/loss value <em>and</em> the Sprague&ndash;Grundy value depend on just
+  three small numbers: how many removable full layers remain, how many removable side+middle
+  pairs remain, and how full the top layer is (mod 3). Layer positions, placement choices,
+  and the entire centre-of-mass coupling never change a single game value. That triple is
+  precisely the video's fractional bookkeeping pair in different notation, and its move
+  structure &mdash; a full layer yields one move or two at the miner's choice, every third
+  move releases a fresh layer into the pool &mdash; is the video's game exactly. The naive
+  model isn't an approximation of idealized Jenga; it's a faithful quotient of it. On top of
+  the video's P/N analysis, the brute force also yields full Grundy values.</p>
 
   <h2>The exact solves</h2>
 
