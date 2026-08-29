@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jenga, Solved</title>
+<meta name="description" content="Idealized Jenga under exact rigid-body statics reduces to a solvable token game: first player wins iff the tower height is not a multiple of 3.">
+<style>
+  :root {
+    --bg: #fdfcf9;
+    --fg: #24211c;
+    --muted: #6b6459;
+    --accent: #8a4b08;
+    --box: #f3efe6;
+    --border: #ddd5c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191714;
+      --fg: #e8e3d8;
+      --muted: #a39a8a;
+      --accent: #e0a35c;
+      --box: #23201b;
+      --border: #3a352c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.6;
+    font-size: 1.06rem;
+  }
+  main { max-width: 44rem; margin: 0 auto; padding: 3rem 1.2rem 4rem; }
+  h1 { font-size: 2.3rem; line-height: 1.15; margin: 0 0 0.2rem; }
+  .subtitle { font-size: 1.25rem; color: var(--muted); font-style: italic; margin: 0 0 0.8rem; }
+  .byline { color: var(--muted); font-size: 0.95rem; margin-bottom: 2.2rem; }
+  h2 { font-size: 1.35rem; margin: 2.4rem 0 0.6rem; }
+  .result {
+    background: var(--box);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    padding: 1rem 1.2rem;
+    margin: 1.8rem 0;
+    border-radius: 4px;
+  }
+  .result p { margin: 0.4rem 0; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 1.2rem 0; }
+  .downloads a {
+    display: inline-block;
+    padding: 0.55rem 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--box);
+    color: var(--fg);
+    text-decoration: none;
+    font-family: system-ui, sans-serif;
+    font-size: 0.92rem;
+  }
+  .downloads a.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+  .downloads a:hover { filter: brightness(1.08); }
+  a { color: var(--accent); }
+  table { border-collapse: collapse; margin: 1rem auto; font-size: 0.98rem; }
+  th, td { padding: 0.3rem 0.9rem; text-align: center; border-bottom: 1px solid var(--border); }
+  th { border-bottom: 2px solid var(--muted); }
+  code, .mono { font-family: ui-monospace, 'Cascadia Code', Menlo, monospace; font-size: 0.92em; }
+  .footnote { color: var(--muted); font-size: 0.9rem; margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .win { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Jenga, Solved</h1>
+  <p class="subtitle">(in a perfect frictionless vacuum)</p>
+  <p class="byline">Written by Claude (Anthropic's AI assistant), reporting a joint exploration
+  session with Rob&nbsp;Miles &middot; 28 August 2026</p>
+
+  <div class="downloads">
+    <a class="primary" href="jenga-solved.pdf">Read the paper (PDF, 14 pages)</a>
+    <a href="jenga-solved.tex">LaTeX source</a>
+  </div>
+
+  <p>What happens if you take Jenga seriously as a mathematical object? Keep the blocks
+  perfect &mdash; rigid, uniform, frictionless, snapped to their three slots per layer &mdash; but do
+  genuine rigid-body statics rather than hand-waving about which layers &ldquo;look stable&rdquo;.
+  Then let two players play the actual game: remove a block from below (the tower must
+  survive <em>while you hold it</em>), place it on top, and lose if you have no move that
+  doesn't topple the tower.</p>
+
+  <p>It turns out the whole edifice collapses &mdash; mathematically, not physically &mdash; into a
+  three-number token game that can be solved completely.</p>
+
+  <div class="result">
+    <p><strong>Theorem (Idealized Jenga, solved).</strong> The first player wins the
+    <em>n</em>-layer game if and only if <em>n</em> is <strong>not a multiple of 3</strong>.
+    The winning opening moves are exactly the <em>middle-block</em> removals; every
+    side-block opening loses. In particular, <strong>standard 18-layer Jenga is a
+    second-player win</strong>.</p>
+  </div>
+
+  <h2>Three surprises along the way</h2>
+
+  <p><strong>1. The cheap stability test appears to be exact.</strong> The folklore
+  shortcut &mdash; &ldquo;at every layer, the centre of mass of everything above must sit over the
+  support&rdquo; &mdash; is provably <em>insufficient</em> for general block-stacking (this gap powers
+  Paterson&ndash;Zwick's famous maximum-overhang constructions). For Jenga's geometry we
+  compared it against the full force-balance linear program on over a million towers,
+  including every tower of up to seven layers: not a single disagreement, marginal
+  knife-edge cases included.</p>
+
+  <p><strong>2. The lone side block is a perfect knife edge &mdash; and unreachable anyway.</strong>
+  Can a tall, lopsided superstructure ever balance on a single <em>side</em> block? Every
+  helpful layer above contributes at best &minus;&frac12; a slot-width of centre-of-mass bias, and
+  every intervening perpendicular layer contributes an unavoidable +&frac12;. They cancel
+  <em>exactly</em>: at any height, the best possible centre of mass lands precisely on the
+  boundary of the support &mdash; never inside. (Jenga being three blocks wide is the critical
+  width for this; at width five it would be hopeless.) And even granting knife-edge balance,
+  no legal sequence of moves can ever build the configuration: the move that would create it
+  survives the removal and then collapses under <em>every possible placement</em>. You'd be
+  left holding the block.</p>
+
+  <p><strong>3. The game is secretly a token game.</strong> Across all 1,954,722 positions
+  reachable from towers of two to seven layers &mdash; solved exactly by brute force &mdash; the
+  win/loss value <em>and</em> the Sprague&ndash;Grundy value depend on just three small numbers:
+  how many removable full layers remain, how many removable side+middle pairs remain, and
+  how full the top layer is (mod 3). Layer positions, placement choices, and the entire
+  centre-of-mass coupling never change a single game value. The resulting token game is a
+  fight over move-count parity against a mod-3 clock: a full layer yields one move or two at
+  the miner's choice, and every third move completes the top and releases a fresh layer into
+  the pool.</p>
+
+  <h2>The exact solves</h2>
+
+  <table>
+    <tr><th>layers</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>&hellip;</th><th>18</th></tr>
+    <tr><td>winner</td>
+      <td class="win">1st</td><td>2nd</td><td class="win">1st</td><td class="win">1st</td>
+      <td>2nd</td><td class="win">1st</td><td></td><td>2nd</td></tr>
+    <tr><td>Grundy</td><td>2</td><td>0</td><td>1</td><td>2</td><td>0</td><td>1</td><td></td><td>0</td></tr>
+  </table>
+
+  <p>The two-layer game is a gem: the first player removes the bottom middle block, drops it
+  on top, and the opponent &mdash; permitted to touch only the bottom <code>LR</code> layer,
+  where removing either block would create a doomed lone side block &mdash; has no legal move
+  at all. Checkmate in one.</p>
+
+  <p>Because genuine Grundy values fall out, multi-tower Jenga is solved for free by XOR:
+  two 18-layer towers side by side are a second-player win; an 18-layer next to a 4-layer is
+  a first-player win, and you must open in the small tower.</p>
+
+  <h2>Exercises for the reader</h2>
+
+  <p>Two pillars of the analysis are established empirically (about a million and two
+  million machine-checked cases respectively) and left, in the finest textbook tradition, as
+  exercises with optional hints: prove that the per-cut test is exact for Jenga's geometry,
+  and prove that the stability constraints never change a game value. The hints are in
+  &sect;5 of the paper &mdash; readers who want the full challenge should stop at the exercise
+  statements.</p>
+
+  <h2>Code</h2>
+
+  <p>Everything is machine-checked: exact integer arithmetic for all stability decisions
+  (every coordinate is a half-integer, so &ldquo;exactly on the boundary&rdquo; is decidable),
+  scipy's LP for ground truth, exhaustive search for the game solves. The three short
+  modules are reproduced as appendices in the paper, or directly:</p>
+
+  <ul>
+    <li><a href="stability.py" class="mono">stability.py</a> &mdash; the statics: exact cut test and the equilibrium LP it was tested against</li>
+    <li><a href="game.py" class="mono">game.py</a> &mdash; the game: bitmask states, move generation, memoized Sprague&ndash;Grundy solver</li>
+    <li><a href="tokens.py" class="mono">tokens.py</a> &mdash; the three-number token game the whole thing reduces to</li>
+  </ul>
+
+  <p class="footnote">This page and the paper were written by Claude, Anthropic's AI
+  assistant, during and after a conversation with Rob Miles in which the model, theorems,
+  and computations were developed jointly. The LaTeX source compiles with
+  <code>latexmk -pdf -shell-escape jenga-solved.tex</code> (the appendices import the
+  <code>.py</code> files from the same directory).</p>
+</main>
+</body>
+</html>
