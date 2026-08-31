@@ -290,52 +290,57 @@ height and $\tfrac{1}{4k+2}$ at odd height $2k+1$.
 
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[scale=1.0]
-% oblique projection: screen = (x + 0.35 y, z + 0.5 y)
-% \cub{x0}{x1}{y0}{y1}{z0}{z1}{color}: front, top, right faces
+\begin{tikzpicture}[scale=0.95]
+% oblique projection: screen = (y + 0.55 x, z + 0.45 x)  [y across, x receding]
+% \cub{y0}{y1}{x0}{x1}{z0}{z1}{color}: front, top, right faces
 \newcommand{\cub}[7]{%
   \fill[#7!45!white,draw=black,line width=0.35pt]
-    ({#1+0.35*#3},{#5+0.5*#3}) -- ({#2+0.35*#3},{#5+0.5*#3}) --
-    ({#2+0.35*#3},{#6+0.5*#3}) -- ({#1+0.35*#3},{#6+0.5*#3}) -- cycle;
+    ({#1+0.55*#3},{#5+0.45*#3}) -- ({#2+0.55*#3},{#5+0.45*#3}) --
+    ({#2+0.55*#3},{#6+0.45*#3}) -- ({#1+0.55*#3},{#6+0.45*#3}) -- cycle;
   \fill[#7!22!white,draw=black,line width=0.35pt]
-    ({#1+0.35*#3},{#6+0.5*#3}) -- ({#2+0.35*#3},{#6+0.5*#3}) --
-    ({#2+0.35*#4},{#6+0.5*#4}) -- ({#1+0.35*#4},{#6+0.5*#4}) -- cycle;
+    ({#1+0.55*#3},{#6+0.45*#3}) -- ({#2+0.55*#3},{#6+0.45*#3}) --
+    ({#2+0.55*#4},{#6+0.45*#4}) -- ({#1+0.55*#4},{#6+0.45*#4}) -- cycle;
   \fill[#7!62!gray,draw=black,line width=0.35pt]
-    ({#2+0.35*#3},{#5+0.5*#3}) -- ({#2+0.35*#4},{#5+0.5*#4}) --
-    ({#2+0.35*#4},{#6+0.5*#4}) -- ({#2+0.35*#3},{#6+0.5*#3}) -- cycle;}
-% axes triad
-\draw[->,gray] (-1.1,0.05) -- (-0.5,0.05) node[right,gray] {\scriptsize $x$};
-\draw[->,gray] (-1.1,0.05) -- (-0.89,0.35) node[above,gray] {\scriptsize $y$};
-\draw[->,gray] (-1.1,0.05) -- (-1.1,0.65) node[above,gray] {\scriptsize $z$};
-% layer 0 (even, y-slots), back to front
-\cub{0}{3}{2}{3}{0}{0.55}{gray}
-\cub{0}{3}{1}{2}{0}{0.55}{gray}
-\cub{0}{3}{0}{1}{0}{0.55}{gray}
-% layer 1 (odd, x-slots), left to right
-\cub{0}{1}{0}{3}{0.55}{1.1}{gray}
-\cub{1}{2}{0}{3}{0.55}{1.1}{gray}
-\cub{2}{3}{0}{3}{0.55}{1.1}{gray}
+    ({#2+0.55*#3},{#5+0.45*#3}) -- ({#2+0.55*#4},{#5+0.45*#4}) --
+    ({#2+0.55*#4},{#6+0.45*#4}) -- ({#2+0.55*#3},{#6+0.45*#3}) -- cycle;}
+% axes triad: y runs across the screen, x recedes
+\draw[->,gray] (-0.9,0.15) -- (-0.3,0.15) node[right,gray] {\scriptsize $y$};
+\draw[->,gray] (-0.9,0.15) -- (-0.57,0.42) node[above,gray] {\scriptsize $x$};
+\draw[->,gray] (-0.9,0.15) -- (-0.9,0.75) node[above,gray] {\scriptsize $z$};
+% support-boundary plane y=1, back half (behind the crossing blocks)
+\fill[orange,opacity=0.10] (1.55,1.45) -- (2.76,2.44) -- (2.76,5.54) -- (1.55,4.55) -- cycle;
+\draw[dashed,thick,orange!75!black] (1.55,1.45) -- (2.76,2.44) -- (2.76,5.54) -- (1.55,4.55) -- cycle;
+% layer 0 (even, y-slots, receding), left to right
+\cub{0}{1}{0}{3}{0}{0.55}{gray}
+\cub{1}{2}{0}{3}{0}{0.55}{gray}
+\cub{2}{3}{0}{3}{0}{0.55}{gray}
+% layer 1 (odd, crossing), back to front
+\cub{0}{3}{2}{3}{0.55}{1.1}{gray}
+\cub{0}{3}{1}{2}{0.55}{1.1}{gray}
+\cub{0}{3}{0}{1}{0.55}{1.1}{gray}
 % the interesting stack
-\cub{0}{3}{0}{1}{1.1}{1.65}{blue}   % lone side block
-\cub{1}{2}{0}{3}{1.65}{2.2}{red}    % perpendicular single
-\cub{0}{3}{0}{1}{2.2}{2.75}{blue}   % parallel L
-\cub{1}{2}{0}{3}{2.75}{3.3}{red}    % perpendicular single
-\cub{0}{3}{0}{1}{3.3}{3.85}{blue}   % parallel L (top)
-% support-boundary plane y = 1
-\fill[orange,opacity=0.06] (0.1,1.5) -- (3.6,1.5) -- (3.6,4.9) -- (0.1,4.9) -- cycle;
-\draw[dashed,thick,orange!75!black] (0.1,1.5) -- (3.6,1.5) -- (3.6,4.9) -- (0.1,4.9) -- cycle;
-\node[above,orange!75!black] at (1.85,4.9) {\small the support-boundary plane $y=1$};
-% centre of mass of the four layers above, at (1.5, 1, mid-height)
-\fill[orange!85!black] (1.85,3.25) circle (0.075);
-\draw[orange!85!black,line width=0.5pt] (1.92,3.29) -- (4.3,4.1);
-\node[anchor=west,align=left] at (4.3,4.1)
+\cub{0}{1}{0}{3}{1.1}{1.65}{blue}   % lone side block (receding)
+\cub{0}{3}{1}{2}{1.65}{2.2}{red}    % perpendicular single (crossing)
+\cub{0}{1}{0}{3}{2.2}{2.75}{blue}   % parallel L
+\cub{0}{3}{1}{2}{2.75}{3.3}{red}    % perpendicular single
+\cub{0}{1}{0}{3}{3.3}{3.85}{blue}   % parallel L (top)
+% support-boundary plane y=1, front half (in front of the crossing blocks)
+\fill[orange,opacity=0.10] (0.89,0.91) -- (1.55,1.45) -- (1.55,4.55) -- (0.89,4.01) -- cycle;
+\draw[dashed,thick,orange!75!black] (0.89,0.91) -- (1.55,1.45) -- (1.55,4.55) -- (0.89,4.01) -- cycle;
+\node[anchor=south,orange!75!black] at (1.8,5.56) {\small the support-boundary plane $y=1$};
+% centre of mass of the four layers above, at (y,x,z) = (1, 1.5, mid-height)
+\fill[orange!85!black] (1.825,3.425) circle (0.075);
+\draw[orange!85!black,line width=0.5pt] (1.89,3.46) -- (4.1,4.3);
+\node[anchor=west,align=left] at (4.1,4.3)
   {\small combined COM of the four layers\\\small above the lone block: \emph{exactly}\\\small on the plane};
-\draw[line width=0.5pt] (2.0,2.95) -- (4.3,2.95);
-\node[anchor=west] at (4.3,2.95) {\small perpendicular singles: $+\tfrac12$ each};
-\draw[line width=0.5pt] (2.9,2.45) -- (4.3,2.35);
-\node[anchor=west] at (4.3,2.35) {\small parallel \layer{L} blocks: $-\tfrac12$ each};
-\draw[line width=0.5pt] (2.9,1.4) -- (4.3,1.6);
-\node[anchor=west] at (4.3,1.6) {\small the lone side block};
+\draw[line width=0.5pt] (3.5,3.45) -- (4.05,3.15);
+\draw[line width=0.5pt] (3.5,2.4) -- (4.05,3.05);
+\node[anchor=west] at (4.1,3.1) {\small perpendicular singles: $+\tfrac12$ each};
+\draw[line width=0.5pt] (0.5,3.55) -- (-0.32,3.1);
+\draw[line width=0.5pt] (0.5,2.5) -- (-0.32,2.9);
+\node[anchor=east] at (-0.35,3.0) {\small parallel \layer{L} blocks: $-\tfrac12$ each};
+\draw[line width=0.5pt] (0.45,1.4) -- (-0.32,1.35);
+\node[anchor=east] at (-0.35,1.35) {\small the lone side block};
 \end{tikzpicture}
 \caption{The knife-edge configuration. The lone side block's support ends
 at the plane $y=1$; each perpendicular layer's unavoidable $+\tfrac12$
